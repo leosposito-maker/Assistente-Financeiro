@@ -680,6 +680,36 @@ document.head.appendChild(link);
 </head>
 <body>
 
+
+<!-- Category Manager Modal -->
+<div class="modal-overlay" id="catModal">
+  <div class="modal" style="max-width:400px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;color:var(--text);">🏷️ Categorias</div>
+      <button class="btn-dismiss" onclick="hideCatModal()">✕</button>
+    </div>
+    <div id="catList" style="max-height:240px;overflow-y:auto;margin-bottom:16px;display:flex;flex-direction:column;gap:8px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;font-family:'DM Mono',monospace;">Nova categoria</div>
+      <div style="display:grid;grid-template-columns:44px 1fr 44px;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">Emoji</label>
+          <input type="text" id="newCatIcon" maxlength="2" placeholder="🏷️" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px;font-size:18px;text-align:center;" />
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">Nome</label>
+          <input type="text" id="newCatName" placeholder="Ex: Delivery, Padaria..." style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px;font-family:'Sora',sans-serif;font-size:13px;" />
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">Cor</label>
+          <input type="color" id="newCatColor" value="#00d4aa" style="width:100%;height:36px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;" />
+        </div>
+      </div>
+      <button class="btn-add" style="width:100%;" onclick="addCategory()">+ Adicionar categoria</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="resetModal">
   <div class="modal">
     <div class="modal-icon">🗑️</div>
@@ -770,6 +800,9 @@ document.head.appendChild(link);
     <button class="manual-btn" onclick="toggleManual()">
       ✏️ Prefiro digitar manualmente
     </button>
+    <button class="manual-btn" onclick="showCatModal()" style="color:var(--accent3);">
+      🏷️ Gerenciar categorias
+    </button>
 
     <!-- Manual Form -->
     <div class="manual-form" id="manualForm">
@@ -783,17 +816,7 @@ document.head.appendChild(link);
       </div>
       <div class="form-group">
         <label>Categoria</label>
-        <select id="manualCat">
-          <option>Alimentação</option>
-          <option>Moradia</option>
-          <option>Transporte</option>
-          <option>Saúde</option>
-          <option>Lazer</option>
-          <option>Educação</option>
-          <option>Renda</option>
-          <option>Investimento</option>
-          <option>Outros</option>
-        </select>
+        <select id="manualCat"></select>
       </div>
       <div class="form-group">
         <label>Tipo</label>
@@ -871,6 +894,93 @@ function confirmReset() {
   setTimeout(()=>setStatus('idle','Pronto para ouvir'), 2000);
 }
 
+
+// === CATEGORIES ===
+const DEFAULT_CATS = [
+  {name:'Alimentação', icon:'🍽️', color:'#f97316'},
+  {name:'Moradia', icon:'🏠', color:'#8b5cf6'},
+  {name:'Transporte', icon:'🚗', color:'#3b82f6'},
+  {name:'Saúde', icon:'❤️', color:'#ef4444'},
+  {name:'Lazer', icon:'🎮', color:'#ec4899'},
+  {name:'Educação', icon:'📚', color:'#0ea5e9'},
+  {name:'Renda', icon:'💼', color:'#10b981'},
+  {name:'Investimento', icon:'📈', color:'#00d4aa'},
+  {name:'Outros', icon:'📦', color:'#64748b'},
+];
+
+let categories = JSON.parse(localStorage.getItem('fin_categories') || 'null') || DEFAULT_CATS;
+
+function saveCategories() {
+  localStorage.setItem('fin_categories', JSON.stringify(categories));
+}
+
+function buildCatColors() {
+  const obj = {};
+  categories.forEach(c => obj[c.name] = c.color);
+  return obj;
+}
+
+function buildCatIcons() {
+  const obj = {};
+  categories.forEach(c => obj[c.name] = c.icon);
+  return obj;
+}
+
+function populateCatSelect() {
+  const sel = document.getElementById('manualCat');
+  sel.innerHTML = categories.map(c => `<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+}
+
+function showCatModal() {
+  renderCatList();
+  document.getElementById('catModal').classList.add('visible');
+}
+
+function hideCatModal() {
+  document.getElementById('catModal').classList.remove('visible');
+}
+
+function renderCatList() {
+  const container = document.getElementById('catList');
+  container.innerHTML = categories.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">
+      <span style="font-size:18px;">${c.icon}</span>
+      <span style="flex:1;font-size:13px;color:var(--text);">${c.name}</span>
+      <span style="width:14px;height:14px;border-radius:50%;background:${c.color};flex-shrink:0;"></span>
+      ${i >= DEFAULT_CATS.length ? `<span onclick="deleteCategory(${i})" style="cursor:pointer;color:var(--text-muted);font-size:14px;padding:2px 6px;border-radius:6px;transition:all 0.2s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-muted)'">✕</span>` : '<span style="width:22px"></span>'}
+    </div>
+  `).join('');
+}
+
+function addCategory() {
+  const icon = document.getElementById('newCatIcon').value.trim() || '🏷️';
+  const name = document.getElementById('newCatName').value.trim();
+  const color = document.getElementById('newCatColor').value;
+
+  if (!name) { alert('Informe o nome da categoria.'); return; }
+  if (categories.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+    alert('Já existe uma categoria com esse nome.');
+    return;
+  }
+
+  categories.push({name, icon, color});
+  saveCategories();
+  populateCatSelect();
+  renderCatList();
+  document.getElementById('newCatName').value = '';
+  document.getElementById('newCatIcon').value = '';
+}
+
+function deleteCategory(i) {
+  const cat = categories[i];
+  if (!confirm(`Remover a categoria "${cat.name}"?`)) return;
+  categories.splice(i, 1);
+  saveCategories();
+  populateCatSelect();
+  renderCatList();
+  render();
+}
+
 // === PWA INSTALL ===
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -900,22 +1010,15 @@ let recognition = null;
 let isRecording = false;
 let selectedMonth = '';
 
-// Cat colors
-const CAT_COLORS = {
-  'Alimentação': '#f97316', 'Moradia': '#8b5cf6', 'Transporte': '#3b82f6',
-  'Saúde': '#ef4444', 'Lazer': '#ec4899', 'Educação': '#0ea5e9',
-  'Renda': '#10b981', 'Investimento': '#00d4aa', 'Outros': '#64748b'
-};
-
-const CAT_ICONS = {
-  'Alimentação':'🍽️','Moradia':'🏠','Transporte':'🚗','Saúde':'❤️',
-  'Lazer':'🎮','Educação':'📚','Renda':'💼','Investimento':'📈','Outros':'📦'
-};
+// Cat colors - dynamic from categories
+function getCatColor(name) { return buildCatColors()[name] || '#64748b'; }
+function getCatIcon(name) { return buildCatIcons()[name] || '📦'; }
 
 // === INIT ===
 if (apiKey) document.getElementById('apiKeyInput').value = apiKey;
 const now = new Date();
 selectedMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+populateCatSelect();
 populateMonthSelector();
 render();
 
@@ -1020,7 +1123,7 @@ function renderDonut(filtered) {
   let legend = '';
 
   entries2.forEach(([cat, val]) => {
-    const color = CAT_COLORS[cat] || '#64748b';
+    const color = getCatColor(cat);
     const slice = (val/total) * Math.PI * 2;
     const x1 = cx + r * Math.cos(angle);
     const y1 = cy + r * Math.sin(angle);
@@ -1063,7 +1166,7 @@ function renderCategories(filtered) {
   container.innerHTML = sorted.map(([cat, val]) => `
     <div class="cat-item">
       <span class="cat-dot" style="background:${CAT_COLORS[cat]||'#64748b'}"></span>
-      <span class="cat-name">${CAT_ICONS[cat]||'📦'} ${cat}</span>
+      <span class="cat-name">${getCatIcon(cat)} ${cat}</span>
       <div class="cat-bar-wrap">
         <div class="cat-bar" style="width:${(val/max*100).toFixed(0)}%;background:${CAT_COLORS[cat]||'#64748b'}"></div>
       </div>
