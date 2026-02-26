@@ -1165,10 +1165,10 @@ function renderCategories(filtered) {
 
   container.innerHTML = sorted.map(([cat, val]) => `
     <div class="cat-item">
-      <span class="cat-dot" style="background:${CAT_COLORS[cat]||'#64748b'}"></span>
+      <span class="cat-dot" style="background:${getCatColor(cat)}"></span>
       <span class="cat-name">${getCatIcon(cat)} ${cat}</span>
       <div class="cat-bar-wrap">
-        <div class="cat-bar" style="width:${(val/max*100).toFixed(0)}%;background:${CAT_COLORS[cat]||'#64748b'}"></div>
+        <div class="cat-bar" style="width:${(val/max*100).toFixed(0)}%;background:${getCatColor(cat)}"></div>
       </div>
       <span class="cat-value">${fmt(val)}</span>
     </div>
