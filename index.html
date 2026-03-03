@@ -1059,16 +1059,33 @@ function render() {
   const filtered = getFilteredEntries();
   const income = filtered.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
   const expense = filtered.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
-  const balance = income - expense;
+
+  // Saldo acumulado: considera TODOS os lançamentos até o fim do mês selecionado
+  const allUntilMonth = entries.filter(e => e.date && e.date.substring(0,7) <= selectedMonth);
+  const totalCredit = allUntilMonth.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
+  const totalDebit = allUntilMonth.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
+  const accumulatedBalance = totalCredit - totalDebit;
+
+  // Saldo anterior (meses anteriores ao selecionado)
+  const previousEntries = entries.filter(e => e.date && e.date.substring(0,7) < selectedMonth);
+  const prevCredit = previousEntries.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
+  const prevDebit = previousEntries.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
+  const previousBalance = prevCredit - prevDebit;
 
   document.getElementById('totalIncome').textContent = fmt(income);
   document.getElementById('totalExpense').textContent = fmt(expense);
-  document.getElementById('balance').textContent = fmt(Math.abs(balance));
-  document.getElementById('balance').style.color = balance >= 0 ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('balance').textContent = fmt(Math.abs(accumulatedBalance));
+  document.getElementById('balance').style.color = accumulatedBalance >= 0 ? 'var(--accent)' : 'var(--red)';
   document.getElementById('totalEntries').textContent = filtered.length;
   document.getElementById('incomeCount').textContent = `${filtered.filter(e=>e.type==='credit').length} lançamentos`;
   document.getElementById('expenseCount').textContent = `${filtered.filter(e=>e.type==='debit').length} lançamentos`;
-  document.getElementById('balanceStatus').textContent = balance >= 0 ? '✓ Positivo' : '✗ Negativo';
+
+  // Mostrar saldo anterior se existir
+  if (previousBalance !== 0) {
+    document.getElementById('balanceStatus').textContent = `Saldo anterior: ${fmt(previousBalance)}`;
+  } else {
+    document.getElementById('balanceStatus').textContent = accumulatedBalance >= 0 ? '✓ Positivo' : '✗ Negativo';
+  }
 
   renderBarChart(income, expense);
   renderDonut(filtered);
@@ -1284,9 +1301,11 @@ async function processAudioTranscript(transcript) {
         max_tokens: 300,
         system: `Você é um assistente financeiro. Extraia informações de lançamentos financeiros do usuário.
 Responda APENAS com JSON válido no formato:
-{"description":"...","value":0.00,"type":"credit ou debit","category":"Alimentação|Moradia|Transporte|Saúde|Lazer|Educação|Renda|Investimento|Outros"}
+{"description":"...","value":0.00,"type":"credit ou debit","category":"NOME_DA_CATEGORIA"}
 type é "credit" para receitas/entradas e "debit" para despesas/saídas.
-Se não conseguir extrair, responda: {"error":"não entendido"}`,
+As categorias disponíveis são: ${categories.map(c=>c.name).join(', ')}.
+Escolha a categoria mais adequada dentre as disponíveis. Se nenhuma se encaixar, use "Outros".
+Se não conseguir extrair o lançamento, responda: {"error":"não entendido"}`,
         messages: [{ role: 'user', content: transcript }]
       })
     });
@@ -1325,19 +1344,31 @@ function basicNLP(text) {
 
   // Type
   const creditWords = ['recebi','salário','salario','ganhou','ganhe','entrou','paguei não','receita','vendi','vendeu'];
-  const debitWords = ['paguei','gastei','comprei','despesa','saiu','pago','conta','aluguel','mercado'];
   const isCredit = creditWords.some(w => lower.includes(w));
   const type = isCredit ? 'credit' : 'debit';
 
-  // Category
+  // First check custom categories by name match
   let category = 'Outros';
-  if (/mercado|supermercado|comida|restau|lanche|aliment/.test(lower)) category = 'Alimentação';
-  else if (/aluguel|luz|água|agua|condominio|internet|moradia/.test(lower)) category = 'Moradia';
-  else if (/uber|combustível|gasolina|transporte|ônibus|onibus/.test(lower)) category = 'Transporte';
-  else if (/saúde|saude|médico|medico|farmácia|farmacia|consulta/.test(lower)) category = 'Saúde';
-  else if (/lazer|cinema|viagem|jogo|barzinho/.test(lower)) category = 'Lazer';
-  else if (/escola|faculdade|curso|educação|educacao/.test(lower)) category = 'Educação';
-  else if (/salário|salario|recebimento|renda|pagamento/.test(lower)) category = 'Renda';
+  const customMatch = categories.find(c => {
+    const catLower = c.name.toLowerCase();
+    // Remove accents for comparison
+    const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+    return lower.includes(normalize(catLower)) || lower.includes(catLower);
+  });
+  if (customMatch) {
+    category = customMatch.name;
+  } else {
+    // Fallback to keyword matching
+    if (/mercado|supermercado|comida|restau|lanche|aliment/.test(lower)) category = 'Alimentação';
+    else if (/aluguel|luz|água|agua|condominio|internet|moradia/.test(lower)) category = 'Moradia';
+    else if (/uber|combustível|gasolina|transporte|ônibus|onibus/.test(lower)) category = 'Transporte';
+    else if (/saúde|saude|médico|medico|farmácia|farmacia|consulta/.test(lower)) category = 'Saúde';
+    else if (/lazer|cinema|viagem|jogo|barzinho/.test(lower)) category = 'Lazer';
+    else if (/escola|faculdade|curso|educação|educacao/.test(lower)) category = 'Educação';
+    else if (/salário|salario|recebimento|renda|pagamento/.test(lower)) category = 'Renda';
+    else if (/delivery|ifood|rappi|uber eats/.test(lower)) category = categories.find(c=>c.name.toLowerCase().includes('delivery'))?.name || 'Outros';
+    else if (/padaria|pão|cafe|café/.test(lower)) category = categories.find(c=>c.name.toLowerCase().includes('padaria'))?.name || 'Alimentação';
+  }
 
   // Description: clean up
   let description = text.replace(/^(recebi|paguei|gastei|comprei)\s*/i,'');
