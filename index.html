@@ -805,7 +805,7 @@ document.head.appendChild(link);
     </button>
 
     <!-- Manual Form -->
-    <div class="manual-form" id="manualForm">
+    <div class="manual-form" id="manualForm" style="grid-template-columns: 1fr 120px 100px 140px 120px auto;">
       <div class="form-group">
         <label>Descrição</label>
         <input type="text" id="manualDesc" placeholder="Ex: Mercado, Salário..." />
@@ -813,6 +813,10 @@ document.head.appendChild(link);
       <div class="form-group">
         <label>Valor (R$)</label>
         <input type="number" id="manualValue" placeholder="0,00" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Data</label>
+        <input type="date" id="manualDate" />
       </div>
       <div class="form-group">
         <label>Categoria</label>
@@ -1019,6 +1023,9 @@ if (apiKey) document.getElementById('apiKeyInput').value = apiKey;
 const now = new Date();
 selectedMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 populateCatSelect();
+// Set default date to today
+const todayStr = new Date().toISOString().split('T')[0];
+document.getElementById('manualDate').value = todayStr;
 populateMonthSelector();
 render();
 
@@ -1380,7 +1387,8 @@ function basicNLP(text) {
 // === ENTRIES ===
 function addEntry(data) {
   const now2 = new Date();
-  const dateStr = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}-${String(now2.getDate()).padStart(2,'0')}`;
+  const todayStr = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}-${String(now2.getDate()).padStart(2,'0')}`;
+  const dateStr = data.date || todayStr;
   const entry = {
     id: Date.now().toString(),
     description: data.description,
@@ -1425,16 +1433,22 @@ function addManualEntry() {
   const desc = document.getElementById('manualDesc').value.trim();
   const val = parseFloat(document.getElementById('manualValue').value);
   const cat = document.getElementById('manualCat').value;
+  const date = document.getElementById('manualDate').value;
 
   if (!desc || !val || val <= 0) {
     alert('Preencha a descrição e o valor corretamente.');
     return;
   }
+  if (!date) {
+    alert('Selecione a data do lançamento.');
+    return;
+  }
 
-  addEntry({ description: desc, value: val, type: currentType, category: cat });
+  addEntry({ description: desc, value: val, type: currentType, category: cat, date });
   document.getElementById('manualDesc').value = '';
   document.getElementById('manualValue').value = '';
-  setStatus('done', `✓ "${desc}" adicionado manualmente`);
+  // Keep date as-is so user can add multiple entries for same date
+  setStatus('done', `✓ "${desc}" adicionado em ${new Date(date+'T12:00:00').toLocaleDateString('pt-BR')}`);
   setTimeout(()=>setStatus('idle','Pronto para ouvir'),2000);
 }
 </script>
