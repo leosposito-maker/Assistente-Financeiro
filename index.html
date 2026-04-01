@@ -741,6 +741,7 @@ document.head.appendChild(link);
     <div class="month-selector">
       <span>Mês:</span>
       <select id="monthSelect" onchange="filterByMonth()"></select>
+      <button class="btn-pdf" onclick="gerarPDF()">📄 PDF</button>
       <button class="btn-reset" onclick="showResetModal()">🗑️ Zerar</button>
     </div>
   </header>
@@ -983,6 +984,172 @@ function deleteCategory(i) {
   populateCatSelect();
   renderCatList();
   render();
+}
+
+
+// === GERAR PDF ===
+function gerarPDF() {
+  const filtered = getFilteredEntries();
+  const monthName = new Date(selectedMonth.split('-')[0], selectedMonth.split('-')[1]-1, 1)
+    .toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+
+  const income = filtered.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
+  const expense = filtered.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
+
+  // Saldo acumulado
+  const allUntilMonth = entries.filter(e => e.date && e.date.substring(0,7) <= selectedMonth);
+  const totalCredit = allUntilMonth.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
+  const totalDebit = allUntilMonth.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
+  const accumulatedBalance = totalCredit - totalDebit;
+
+  const previousEntries = entries.filter(e => e.date && e.date.substring(0,7) < selectedMonth);
+  const prevCredit = previousEntries.filter(e=>e.type==='credit').reduce((s,e)=>s+e.value,0);
+  const prevDebit = previousEntries.filter(e=>e.type==='debit').reduce((s,e)=>s+e.value,0);
+  const previousBalance = prevCredit - prevDebit;
+
+  // Categorias de despesa
+  const catData = {};
+  filtered.filter(e=>e.type==='debit').forEach(e => {
+    catData[e.category] = (catData[e.category]||0) + e.value;
+  });
+  const catSorted = Object.entries(catData).sort((a,b)=>b[1]-a[1]);
+
+  // Categorias de receita
+  const catDataInc = {};
+  filtered.filter(e=>e.type==='credit').forEach(e => {
+    catDataInc[e.category] = (catDataInc[e.category]||0) + e.value;
+  });
+  const catSortedInc = Object.entries(catDataInc).sort((a,b)=>b[1]-a[1]);
+
+  // Lançamentos ordenados por data
+  const sorted = [...filtered].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>DRE - ${monthName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; background: white; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 2px solid #00b894; }
+  .logo { font-size: 22px; font-weight: 800; color: #00b894; }
+  .logo span { color: #1a1a1a; }
+  .doc-info { text-align: right; font-size: 11px; color: #666; }
+  .doc-info strong { font-size: 14px; color: #1a1a1a; display:block; margin-bottom:4px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #666; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 8px; }
+  .summary-card { background: #f8f9fa; border-radius: 8px; padding: 14px; border-left: 4px solid #ccc; }
+  .summary-card.green { border-left-color: #00b894; }
+  .summary-card.red { border-left-color: #e17055; }
+  .summary-card.blue { border-left-color: #0984e3; }
+  .summary-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 4px; }
+  .summary-card .value { font-size: 18px; font-weight: 700; }
+  .summary-card.green .value { color: #00b894; }
+  .summary-card.red .value { color: #e17055; }
+  .summary-card.blue .value { color: #0984e3; }
+  .summary-card .sub { font-size: 10px; color: #aaa; margin-top: 2px; }
+  table { width:100%; border-collapse: collapse; margin-bottom: 8px; }
+  th { background: #f1f2f6; text-align:left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f1f2f6; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  .amount-pos { color: #00b894; font-weight: 600; text-align:right; }
+  .amount-neg { color: #e17055; font-weight: 600; text-align:right; }
+  .amount-neutral { font-weight: 600; text-align:right; }
+  .total-row td { font-weight: 700; background: #f8f9fa; border-top: 2px solid #ddd; }
+  .badge { display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+  .badge-credit { background: rgba(0,184,148,0.1); color: #00b894; }
+  .badge-debit { background: rgba(225,112,85,0.1); color: #e17055; }
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #eee; font-size: 10px; color: #aaa; text-align: center; }
+  .saldo-anterior { background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #388e3c; }
+  @media print { body { padding: 16px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">Financeiro<span>AI</span></div>
+    <div style="font-size:11px;color:#888;margin-top:4px;">Demonstrativo de Resultados</div>
+  </div>
+  <div class="doc-info">
+    <strong>${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</strong>
+    Gerado em ${new Date().toLocaleDateString('pt-BR')}
+  </div>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-card green">
+    <div class="label">Total Receitas</div>
+    <div class="value">${fmt(income)}</div>
+    <div class="sub">${filtered.filter(e=>e.type==='credit').length} lançamentos</div>
+  </div>
+  <div class="summary-card red">
+    <div class="label">Total Despesas</div>
+    <div class="value">${fmt(expense)}</div>
+    <div class="sub">${filtered.filter(e=>e.type==='debit').length} lançamentos</div>
+  </div>
+  <div class="summary-card blue">
+    <div class="label">Saldo Acumulado</div>
+    <div class="value" style="color:${accumulatedBalance>=0?'#0984e3':'#e17055'}">${fmt(accumulatedBalance)}</div>
+    <div class="sub">${accumulatedBalance>=0?'Positivo':'Negativo'}</div>
+  </div>
+</div>
+
+${previousBalance !== 0 ? `<div class="saldo-anterior">💰 Saldo anterior (meses anteriores): ${fmt(previousBalance)}</div>` : ''}
+
+${catSortedInc.length > 0 ? `
+<h2>Receitas por Categoria</h2>
+<table>
+  <tr><th>Categoria</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th></tr>
+  ${catSortedInc.map(([cat,val]) => `
+  <tr>
+    <td>${getCatIcon(cat)} ${cat}</td>
+    <td class="amount-pos">${fmt(val)}</td>
+    <td style="text-align:right;color:#888">${income>0?(val/income*100).toFixed(1):0}%</td>
+  </tr>`).join('')}
+  <tr class="total-row"><td>Total</td><td class="amount-pos">${fmt(income)}</td><td style="text-align:right">100%</td></tr>
+</table>` : ''}
+
+${catSorted.length > 0 ? `
+<h2>Despesas por Categoria</h2>
+<table>
+  <tr><th>Categoria</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th></tr>
+  ${catSorted.map(([cat,val]) => `
+  <tr>
+    <td>${getCatIcon(cat)} ${cat}</td>
+    <td class="amount-neg">${fmt(val)}</td>
+    <td style="text-align:right;color:#888">${expense>0?(val/expense*100).toFixed(1):0}%</td>
+  </tr>`).join('')}
+  <tr class="total-row"><td>Total</td><td class="amount-neg">${fmt(expense)}</td><td style="text-align:right">100%</td></tr>
+</table>` : ''}
+
+<h2>Lançamentos do Mês</h2>
+<table>
+  <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th style="text-align:right">Valor</th></tr>
+  ${sorted.map(e => `
+  <tr>
+    <td>${new Date(e.date+'T12:00:00').toLocaleDateString('pt-BR')}</td>
+    <td>${e.description}</td>
+    <td>${e.category}</td>
+    <td><span class="badge badge-${e.type}">${e.type==='credit'?'Receita':'Despesa'}</span></td>
+    <td class="${e.type==='credit'?'amount-pos':'amount-neg'}">${e.type==='credit'?'+':'-'} ${fmt(e.value)}</td>
+  </tr>`).join('')}
+  <tr class="total-row">
+    <td colspan="4">Resultado do Mês</td>
+    <td class="${income-expense>=0?'amount-pos':'amount-neg'}">${fmt(income-expense)}</td>
+  </tr>
+</table>
+
+<div class="footer">FinanceiroAI · Relatório gerado automaticamente · ${new Date().toLocaleString('pt-BR')}</div>
+
+<script>window.onload = () => { window.print(); }<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
 }
 
 // === PWA INSTALL ===
